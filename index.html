@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图王生成器</title>
+    <style>
+        :root {
+            --primary: #222;
+            --light-gray: #f5f5f5;
+            --border: #ddd;
+            --text: #333;
+            --text-light: #777;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            color: var(--text);
+            line-height: 1.5;
+        }
+        
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        p {
+            color: var(--text-light);
+            margin-bottom: 1.5rem;
+        }
+        
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 1rem 0;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+        }
+        
+        .upload-area:hover {
+            border-color: var(--primary);
+            background: var(--light-gray);
+        }
+        
+        .preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+        
+        .preview-section {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .preview-section h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .preview-image {
+            width: 100%;
+            border: 1px solid var(--border);
+            background: white;
+            image-rendering: pixelated;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 1.5rem 0;
+        }
+        
+        button {
+            padding: 0.6rem 1.2rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+        }
+        
+        button:hover {
+            opacity: 0.9;
+        }
+        
+        button:disabled {
+            background: #aaa;
+            cursor: not-allowed;
+            opacity: 1;
+        }
+        
+        #fileInput, #watermarkInput {
+            display: none;
+        }
+        
+        .watermark-input {
+            margin: 1rem 0;
+        }
+        
+        .watermark-input input {
+            width: 100%;
+            padding: 0.6rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 15px;
+            }
+            
+            .preview-section {
+                min-width: 100%;
+            }
+            
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>图王生成</h1>
+    <p>图越糊，越称王</p>
+    
+    <div class="upload-area" id="dropArea">
+        <p>拖放图片到这里或点击上传</p>
+        <input type="file" id="fileInput" accept="image/*">
+    </div>
+    
+    <div class="watermark-input">
+        <input type="text" id="watermarkInput" placeholder="输入水印文字 (如 @用户名)">
+    </div>
+    
+    <div class="button-group">
+        <button id="downloadBtn" disabled>下载压缩图</button>
+    </div>
+    
+    <div class="preview">
+        <div class="preview-section">
+            <h3>原图</h3>
+            <img id="originalImg" class="preview-image" style="display: none;">
+        </div>
+        <div class="preview-section">
+            <h3>压缩后</h3>
+            <img id="compressedImg" class="preview-image" style="display: none;">
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('fileInput');
+            const watermarkInput = document.getElementById('watermarkInput');
+            const dropArea = document.getElementById('dropArea');
+            const originalImg = document.getElementById('originalImg');
+            const compressedImg = document.getElementById('compressedImg');
+            const downloadBtn = document.getElementById('downloadBtn');
+            
+            let currentFile = null;
+            let compressedDataUrl = null;
+            
+            // 拖放功能
+            dropArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropArea.style.borderColor = '#333';
+                dropArea.style.background = '#eee';
+            });
+            
+            dropArea.addEventListener('dragleave', () => {
+                dropArea.style.borderColor = '#ddd';
+                dropArea.style.background = '';
+            });
+            
+            dropArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropArea.style.borderColor = '#ddd';
+                dropArea.style.background = '';
+                if (e.dataTransfer.files.length) {
+                    handleFile(e.dataTransfer.files[0]);
+                }
+            });
+            
+            dropArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length) {
+                    handleFile(e.target.files[0]);
+                }
+            });
+            
+            // 水印文字改变时重新处理
+            watermarkInput.addEventListener('input', function() {
+                if (originalImg.src && originalImg.style.display !== 'none') {
+                    processImage();
+                }
+            });
+            
+            function handleFile(file) {
+                if (!file.type.match('image.*')) {
+                    alert('请上传图片文件');
+                    return;
+                }
+                
+                currentFile = file;
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    originalImg.src = e.target.result;
+                    originalImg.style.display = 'block';
+                    
+                    // 图片加载完成后自动处理
+                    originalImg.onload = function() {
+                        processImage();
+                    };
+                };
+                
+                reader.readAsDataURL(file);
+            }
+            
+            // 处理极致压缩
+            function processImage() {
+                if (!currentFile) return;
+                
+                downloadBtn.disabled = true;
+                downloadBtn.textContent = '处理中...';
+                
+                // 使用极端的压缩方法
+                extremeCompress(originalImg, watermarkInput.value, function(dataUrl) {
+                    compressedImg.src = dataUrl;
+                    compressedImg.style.display = 'block';
+                    compressedDataUrl = dataUrl;
+                    
+                    downloadBtn.disabled = false;
+                    downloadBtn.textContent = '下载压缩图';
+                });
+            }
+            
+            // 下载功能
+            downloadBtn.addEventListener('click', function() {
+                if (!compressedDataUrl) return;
+                
+                const link = document.createElement('a');
+                link.download = 'extreme_compressed_' + currentFile.name;
+                link.href = compressedDataUrl;
+                link.click();
+            });
+            
+            // 极致压缩函数（保持原有压缩效果并添加水印）
+            function extremeCompress(imgElement, watermarkText, callback) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // 1. 大幅缩小尺寸
+                const reduceFactor = 0.1; // 缩小到10%
+                canvas.width = imgElement.naturalWidth * reduceFactor;
+                canvas.height = imgElement.naturalHeight * reduceFactor;
+                
+                // 2. 绘制缩小后的图像
+                ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+                
+                // 3. 应用像素化效果
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                tempCtx.drawImage(canvas, 0, 0);
+                
+                // 4. 使用极低质量JPEG压缩
+                const quality = 0.1; // 10%质量
+                const dataUrl = tempCanvas.toDataURL('image/jpeg', quality);
+                
+                // 5. 再次放大图像，增强像素化效果
+                const finalCanvas = document.createElement('canvas');
+                const finalCtx = finalCanvas.getContext('2d');
+                finalCanvas.width = imgElement.naturalWidth;
+                finalCanvas.height = imgElement.naturalHeight;
+                
+                const tempImg = new Image();
+                tempImg.onload = function() {
+                    // 使用 nearest-neighbor 算法放大，保持像素化效果
+                    finalCtx.imageSmoothingEnabled = false;
+                    finalCtx.drawImage(tempImg, 0, 0, finalCanvas.width, finalCanvas.height);
+                    
+                    // 添加水印（跟随压缩效果）
+                    if (watermarkText) {
+                        addWatermark(finalCanvas, finalCtx, watermarkText);
+                    }
+                    
+                    // 最终压缩
+                    const finalDataUrl = finalCanvas.toDataURL('image/jpeg', 0.3);
+                    callback(finalDataUrl);
+                };
+                tempImg.src = dataUrl;
+            }
+            
+            // 添加水印函数（跟随压缩效果）
+            function addWatermark(canvas, ctx, text) {
+                // 根据压缩后的效果调整水印样式
+                const fontSize = Math.max(12, canvas.width * 0.02); // 按宽度2%计算，最小12px
+                const margin = fontSize;
+                
+                ctx.font = `bold ${fontSize}px Arial`;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'bottom';
+                
+                // 添加文字阴影增强可读性
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.lineWidth = fontSize * 0.1;
+                ctx.strokeText(text, canvas.width - margin, canvas.height - margin);
+                
+                // 绘制水印文字
+                ctx.fillText(text, canvas.width - margin, canvas.height - margin);
+            }
+        });
+    </script>
+</body>
+</html>
